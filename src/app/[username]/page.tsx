@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ProfileCard } from '@/components/ProfileCard';
 import { StatsDashboard } from '@/components/StatsDashboard';
@@ -24,6 +23,12 @@ import { CompareSection } from '@/components/CompareSection';
 import { TimelineSection } from '@/components/TimelineSection';
 import { LoadingAnimation } from '@/components/LoadingComponents';
 import { ParticleBackground } from '@/components/ParticleBackground';
+import { HeroBanner } from '@/components/HeroBanner';
+import { BadgeGenerator } from '@/components/BadgeGenerator';
+import { MobileView } from '@/components/MobileView';
+import { StatsChart } from '@/components/StatsChart';
+import { QuickActions } from '@/components/QuickActions';
+import { KeyboardShortcuts } from '@/components/KeyboardShortcuts';
 
 interface UserData {
   user: {
@@ -117,7 +122,6 @@ interface UserData {
 
 export default function ResultsPage() {
   const params = useParams();
-  const router = useRouter();
   const username = params.username as string;
   const [data, setData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -135,9 +139,7 @@ export default function ResultsPage() {
         ]);
 
         if (!userRes.ok) {
-          if (userRes.status === 404) {
-            throw new Error('User not found');
-          }
+          if (userRes.status === 404) throw new Error('User not found');
           throw new Error('Failed to fetch user data');
         }
 
@@ -148,7 +150,6 @@ export default function ResultsPage() {
         const level = Math.floor(xp / 100) + 1;
         const ranks = ['Novice', 'Apprentice', 'Journeyman', 'Expert', 'Master', 'Grandmaster', 'Legend', 'Mythic', 'Transcendent', 'Divine'];
         const rankIndex = Math.min(Math.floor((level - 1) / 10), ranks.length - 1);
-        const rank = ranks[rankIndex];
         const titles = ['Beginner', 'Learner', 'Builder', 'Creator', 'Contributor', 'Hacker', 'Expert', 'Master', 'Legend', 'Grandmaster'];
         const titleIndex = Math.min(Math.floor((level - 1) / 5), titles.length - 1);
         const xpForLevel = (lvl: number) => lvl * 100;
@@ -163,14 +164,7 @@ export default function ResultsPage() {
         setData({
           ...userData,
           personality: personalityData.personality,
-          level: {
-            level,
-            title: titles[titleIndex],
-            rank,
-            xp,
-            xpToNext,
-            progress,
-          },
+          level: { level, title: titles[titleIndex], rank: ranks[rankIndex], xp, xpToNext, progress },
           achievements,
         });
         setRoast(randomRoast);
@@ -181,9 +175,7 @@ export default function ResultsPage() {
       }
     }
 
-    if (username) {
-      fetchData();
-    }
+    if (username) fetchData();
   }, [username]);
 
   if (loading) {
@@ -191,6 +183,7 @@ export default function ResultsPage() {
       <div className="min-h-screen relative overflow-hidden">
         <ParticleBackground variant="cyber" />
         <LoadingAnimation />
+        <KeyboardShortcuts />
       </div>
     );
   }
@@ -199,25 +192,17 @@ export default function ResultsPage() {
     return (
       <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
         <ParticleBackground variant="stars" />
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="relative z-10 text-center max-w-md"
-        >
+        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="relative z-10 text-center max-w-md">
           <GlassPanel glowColor="magenta" className="p-8">
             <div className="text-8xl mb-4">😵</div>
-            <h2 className="font-orbitron text-3xl font-bold text-[var(--neon-magenta)] mb-2">
-              Oops!
-            </h2>
+            <h2 className="font-orbitron text-3xl font-bold text-[var(--neon-magenta)] mb-2">Oops!</h2>
             <p className="font-mono text-gray-400 mb-6">{error}</p>
-            <Link
-              href="/"
-              className="inline-block chrome-button px-8 py-4 font-orbitron text-sm uppercase tracking-wider text-[var(--neon-cyan)]"
-            >
+            <a href="/" className="inline-block chrome-button px-8 py-4 font-orbitron text-sm uppercase tracking-wider text-[var(--neon-cyan)]">
               ← Try Again
-            </Link>
+            </a>
           </GlassPanel>
         </motion.div>
+        <KeyboardShortcuts />
       </div>
     );
   }
@@ -226,75 +211,31 @@ export default function ResultsPage() {
 
   const handleNewRoast = () => {
     const roasts = generateRoasts(data.stats);
-    const randomRoast = roasts[Math.floor(Math.random() * roasts.length)];
-    setRoast(randomRoast);
+    setRoast(roasts[Math.floor(Math.random() * roasts.length)]);
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden pb-20">
+    <div className="min-h-screen relative overflow-hidden pb-24">
       <ParticleBackground variant="cyber" />
-      
-      {/* Grid overlay */}
-      <div 
-        className="absolute inset-0 opacity-5 z-0"
-        style={{
-          backgroundImage: `
-            linear-gradient(var(--neon-cyan) 1px, transparent 1px),
-            linear-gradient(90deg, var(--neon-cyan) 1px, transparent 1px)
-          `,
-          backgroundSize: '50px 50px',
-        }}
-      />
+      <div className="absolute inset-0 opacity-5 z-0" style={{ backgroundImage: `linear-gradient(var(--neon-cyan) 1px, transparent 1px), linear-gradient(90deg, var(--neon-cyan) 1px, transparent 1px)`, backgroundSize: '50px 50px' }} />
       
       <ResultsNav username={username} />
+      <QuickActions username={username} />
+      <KeyboardShortcuts />
       
       <div className="relative z-10 max-w-6xl mx-auto px-4 pt-24">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-12"
-        >
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: 'spring', delay: 0.2 }}
-            className="inline-block mb-4"
-          >
-            <div 
-              className="w-20 h-20 mx-auto rounded-xl flex items-center justify-center text-4xl"
-              style={{
-                background: `linear-gradient(135deg, ${data.personality.color}30, ${data.personality.color}10)`,
-                border: `2px solid ${data.personality.color}`,
-                boxShadow: `0 0 30px ${data.personality.color}`,
-              }}
-            >
-              {data.personality.icon}
-            </div>
-          </motion.div>
-          
-          <div className="inline-block pixel-badge mb-4">✨ ANALYSIS COMPLETE</div>
-          <h1 className="font-orbitron text-4xl md:text-6xl font-black mb-2">
-            <span className="text-[var(--neon-cyan)]">@</span>
-            <span className="text-white">{username}</span>
-          </h1>
-          <p className="font-mono text-gray-400">
-            <span className="text-[var(--neon-yellow)]">{data.level.rank}</span> • 
-            Level {data.level.level} • 
-            <span style={{ color: data.personality.color }}> {data.personality.type}</span>
-          </p>
-        </motion.div>
+        {/* Hero Banner */}
+        <HeroBanner 
+          username={username} 
+          avatar={data.user.avatarUrl}
+          stats={data.stats}
+          personality={data.personality}
+          level={data.level}
+        />
 
-        {/* Profile Card */}
+        {/* Stats Chart */}
         <div className="mb-8">
-          <ProfileCard
-            avatar={data.user.avatarUrl}
-            username={data.user.login}
-            name={data.user.name}
-            bio={data.user.bio}
-            followers={data.user.followers.totalCount}
-            following={data.user.following.totalCount}
-          />
+          <StatsChart stats={data.stats} />
         </div>
 
         {/* Stats Dashboard */}
@@ -322,16 +263,8 @@ export default function ResultsPage() {
 
         {/* Two column layout */}
         <div className="grid md:grid-cols-2 gap-8 mb-8">
-          {/* Contribution Heatmap */}
           <ContributionHeatmap contributionHistory={data.stats.contributionHistory} />
-          
-          {/* Coding Pattern */}
-          <CodingPatternViz 
-            commitDistribution={data.stats.commitDistribution}
-            peakHour={data.stats.peakHour}
-            peakDay={data.stats.peakDay}
-            codingPattern={data.stats.codingPattern}
-          />
+          <CodingPatternViz commitDistribution={data.stats.commitDistribution} peakHour={data.stats.peakHour} peakDay={data.stats.peakDay} codingPattern={data.stats.codingPattern} />
         </div>
 
         {/* Language & Activity */}
@@ -374,25 +307,23 @@ export default function ResultsPage() {
           </div>
         )}
 
-        {/* README Generator */}
+        {/* Badge Generator */}
         <div className="mb-8">
-          <ReadmeGenerator
-            username={username}
-            stats={data.stats}
-            personality={data.personality}
-          />
+          <BadgeGenerator username={username} stats={data.stats} personality={data.personality} level={data.level} />
         </div>
 
-        {/* Footer */}
-        <motion.footer
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1 }}
-          className="text-center py-8 border-t border-[rgba(255,255,255,0.1)]"
-        >
-          <p className="font-mono text-sm text-gray-500">
-            Made with 💖 using Next.js & GitHub GraphQL API
-          </p>
+        {/* README Generator */}
+        <div className="mb-8">
+          <ReadmeGenerator username={username} stats={data.stats} personality={data.personality} />
+        </div>
+
+        {/* Mobile View */}
+        <div className="mb-8">
+          <MobileView username={username} avatar={data.user.avatarUrl} stats={data.stats} personality={data.personality} />
+        </div>
+
+        <motion.footer initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }} className="text-center py-8 border-t border-[rgba(255,255,255,0.1)]">
+          <p className="font-mono text-sm text-gray-500">Made with 💖 using Next.js & GitHub GraphQL API</p>
         </motion.footer>
       </div>
     </div>
