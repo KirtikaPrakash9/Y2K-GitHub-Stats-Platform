@@ -361,7 +361,7 @@ export function calculateStats(user: GitHubUser): UserStats {
   let streak = 0;
   let currentStreak = 0;
   let longestStreak = 0;
-  let commitHourCounts = new Array(24).fill(0);
+  const commitHourCounts = new Array(24).fill(0);
   let totalContributions = 0;
 
   weeks.forEach(week => {
