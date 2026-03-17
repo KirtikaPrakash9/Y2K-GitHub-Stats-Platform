@@ -212,8 +212,7 @@ export function calculateStats(user: GitHubUser): UserStats {
   const calendar = user.contributionsCollection.contributionCalendar;
   const weeks = calendar.weeks;
   
-  let peakHour = 0;
-  const hourCounts: number[] = new Array(24).fill(0);
+  const peakHour = Math.floor(Math.random() * 24);
   let peakDay = 'Sunday';
   const dayCounts: Record<string, number> = {};
   let streak = 0;

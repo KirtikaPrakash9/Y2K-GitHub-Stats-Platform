@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ProfileCard } from '@/components/ProfileCard';
@@ -153,12 +154,12 @@ export default function ResultsPage() {
               Oops!
             </h2>
             <p className="font-mono text-gray-400 mb-6">{error}</p>
-            <a
+            <Link
               href="/"
               className="inline-block chrome-button px-6 py-3 font-orbitron text-sm uppercase tracking-wider text-[var(--neon-cyan)]"
             >
               ← Try Again
-            </a>
+            </Link>
           </GlassPanel>
         </motion.div>
       </div>

@@ -19,7 +19,7 @@ export function StatCard({ icon, label, value, color, delay = 0 }: StatCardProps
       animate={{ opacity: 1, scale: 1 }}
       transition={{ delay, duration: 0.3 }}
     >
-      <GlassPanel glowColor={color as any} className="p-6 group hover:scale-105 transition-transform">
+      <GlassPanel glowColor={color as 'cyan' | 'magenta' | 'yellow' | 'pink' | 'blue'} className="p-6 group hover:scale-105 transition-transform">
         <div className="text-4xl mb-3">{icon}</div>
         <div 
           className="text-3xl font-orbitron font-bold mb-1"

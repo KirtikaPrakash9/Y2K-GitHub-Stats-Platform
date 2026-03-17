@@ -2,10 +2,12 @@
 
 import { motion } from 'framer-motion';
 
+type GlowColor = 'cyan' | 'magenta' | 'yellow' | 'pink' | 'blue';
+
 interface GlassPanelProps {
   children: React.ReactNode;
   className?: string;
-  glowColor?: string;
+  glowColor?: GlowColor;
 }
 
 export function GlassPanel({ children, className = '', glowColor = 'cyan' }: GlassPanelProps) {
