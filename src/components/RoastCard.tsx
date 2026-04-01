@@ -47,8 +47,6 @@ export function RoastCard({ roast, onNewRoast }: RoastCardProps) {
           <ChromeButton 
             onClick={() => {
               onNewRoast();
-              setShowNewButton(false);
-              setTimeout(() => setShowNewButton(true), 100);
             }} 
             glowColor="magenta"
             className="text-xs py-2 px-3"
