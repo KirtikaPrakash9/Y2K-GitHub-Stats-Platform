@@ -1,9 +1,11 @@
 import { Redis } from '@upstash/redis';
 
-const kv = new Redis({
-  url: process.env.KV_REST_API_URL,
-  token: process.env.KV_REST_API_TOKEN,
-});
+const kv = (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN)
+  ? new Redis({
+      url: process.env.KV_REST_API_URL,
+      token: process.env.KV_REST_API_TOKEN,
+    })
+  : null;
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
@@ -35,21 +37,20 @@ export interface GitHubUser {
     totalPullRequestContributions: number;
     totalPullRequestReviewContributions: number;
     totalRepositoriesWithContributedCommits: number;
-    totalIssuesContributions: number;
+    totalIssueContributions: number;
     contributionCalendar: {
       totalContributions: number;
       weeks: {
         contributionDays: ContributionDay[];
       }[];
     };
-    commitmentRepos: {
-      nodes: {
-        repository: {
-          name: string;
-          stargazerCount: number;
-        };
-      }[];
-    };
+    commitContributionsByRepository: {
+      contributions: { totalCount: number };
+      repository: {
+        name: string;
+        stargazerCount: number;
+      };
+    }[];
   };
   repositoriesContributedTo: {
     totalCount: number;
@@ -70,7 +71,7 @@ export interface GitHubRepo {
   description: string;
   stargazerCount: number;
   forkCount: number;
-  watcherCount: number;
+  watchers: { totalCount: number };
   primaryLanguage: {
     name: string;
     color: string;
@@ -89,8 +90,8 @@ export interface GitHubRepo {
   isArchived: boolean;
   isTemplate: boolean;
   isFork: boolean;
-  openIssuesCount: number;
-  topics: string[];
+  issues: { totalCount: number };
+  repositoryTopics: { nodes: { topic: { name: string } }[] };
   licenseInfo: {
     name: string;
   } | null;
@@ -138,7 +139,9 @@ const USER_QUERY = `
           description
           stargazerCount
           forkCount
-          watcherCount
+          watchers {
+            totalCount
+          }
           primaryLanguage {
             name
             color
@@ -157,8 +160,16 @@ const USER_QUERY = `
           isArchived
           isTemplate
           isFork
-          openIssuesCount
-          topics
+          issues(states: OPEN) {
+            totalCount
+          }
+          repositoryTopics(first: 10) {
+            nodes {
+              topic {
+                name
+              }
+            }
+          }
           licenseInfo {
             name
           }
@@ -185,7 +196,7 @@ const USER_QUERY = `
         totalPullRequestContributions
         totalPullRequestReviewContributions
         totalRepositoriesWithContributedCommits
-        totalIssuesContributions
+        totalIssueContributions
         contributionCalendar {
           totalContributions
           weeks {
@@ -196,12 +207,13 @@ const USER_QUERY = `
             }
           }
         }
-        commitmentRepos(first: 10, orderBy: {field: COMMIT_COUNT, direction: DESC}) {
-          nodes {
-            repository {
-              name
-              stargazerCount
-            }
+        commitContributionsByRepository(maxRepositories: 10) {
+          contributions {
+            totalCount
+          }
+          repository {
+            name
+            stargazerCount
           }
         }
       }
@@ -251,13 +263,15 @@ async function fetchGitHubGraphQL(query: string, variables: Record<string, strin
 export async function getGitHubUser(username: string): Promise<GitHubUser | null> {
   const cacheKey = `github:${username}`;
   
-  try {
-    const cached = await kv.get<GitHubUser>(cacheKey);
-    if (cached) {
-      return cached;
+  if (kv) {
+    try {
+      const cached = await kv.get<GitHubUser>(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    } catch {
+      // KV not configured, skip caching
     }
-  } catch {
-    // KV not configured, skip caching
   }
 
   const data = await fetchGitHubGraphQL(USER_QUERY, { username });
@@ -266,10 +280,12 @@ export async function getGitHubUser(username: string): Promise<GitHubUser | null
     return null;
   }
 
-  try {
-    await kv.set(cacheKey, data.user, { ex: 3600 });
-  } catch {
-    // KV not configured, skip caching
+  if (kv) {
+    try {
+      await kv.set(cacheKey, data.user, { ex: 3600 });
+    } catch {
+      // KV not configured, skip caching
+    }
   }
 
   return data.user;
@@ -326,7 +342,7 @@ export function calculateStats(user: GitHubUser): UserStats {
   const ownedRepos = repos.filter(r => !r.isFork);
   const totalStars = repos.reduce((sum, r) => sum + r.stargazerCount, 0);
   const totalForks = repos.reduce((sum, r) => sum + r.forkCount, 0);
-  const totalWatchers = repos.reduce((sum, r) => sum + r.watcherCount, 0);
+  const totalWatchers = repos.reduce((sum, r) => sum + r.watchers.totalCount, 0);
   
   const languages: Record<string, number> = {};
   const languageBytes: Record<string, number> = {};
@@ -433,7 +449,7 @@ export function calculateStats(user: GitHubUser): UserStats {
   ];
 
   const topics = new Set<string>();
-  repos.forEach(r => r.topics.forEach(t => topics.add(t)));
+  repos.forEach(r => r.repositoryTopics.nodes.forEach(n => topics.add(n.topic.name)));
 
   return {
     totalRepos: ownedRepos.length,
@@ -443,7 +459,7 @@ export function calculateStats(user: GitHubUser): UserStats {
     totalCommits: user.contributionsCollection.totalCommitContributions,
     totalPRs: user.contributionsCollection.totalPullRequestContributions,
     totalPRReviews: user.contributionsCollection.totalPullRequestReviewContributions,
-    totalIssues: user.contributionsCollection.totalIssuesContributions,
+    totalIssues: user.contributionsCollection.totalIssueContributions,
     totalIssueComments: user.issueComments.totalCount,
     followers: user.followers.totalCount,
     following: user.following.totalCount,
