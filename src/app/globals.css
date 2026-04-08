@@ -38,6 +38,25 @@ body {
   overflow-x: hidden;
 }
 
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 1;
+  transition: opacity 0.3s ease;
+  background-image:
+    radial-gradient(rgba(255, 255, 255, 0.15) 0.5px, transparent 0.5px),
+    radial-gradient(rgba(255, 255, 255, 0.08) 0.5px, transparent 0.5px);
+  background-size: 3px 3px, 4px 4px;
+  background-position: 0 0, 1px 1px;
+}
+
+body.grain-overlay::after {
+  opacity: 0.18;
+}
+
 .glass-panel {
   background: var(--glass-bg);
   backdrop-filter: blur(20px);
@@ -119,6 +138,15 @@ body {
   );
   pointer-events: none;
   z-index: 9999;
+}
+
+body.motion-minimal *,
+body.motion-minimal *::before,
+body.motion-minimal *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
 }
 
 @keyframes glitch {

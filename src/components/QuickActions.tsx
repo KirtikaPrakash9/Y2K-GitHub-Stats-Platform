@@ -2,22 +2,54 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { generateReadmeMarkdown, generateReadmeSnippet, ReadmePersonality, ReadmeStats } from '@/lib/readme';
 
 interface QuickActionsProps {
   username: string;
+  stats?: ReadmeStats;
+  personality?: ReadmePersonality;
 }
 
-export function QuickActions({ username }: QuickActionsProps) {
-  const [copied, setCopied] = useState(false);
+export function QuickActions({ username, stats, personality }: QuickActionsProps) {
+  const [toast, setToast] = useState<string | null>(null);
+
+  const domain = process.env.NEXT_PUBLIC_DOMAIN || 'https://gitwrapped.vercel.app';
+  const cardUrl = `${domain}/api/card?username=${username}&theme=cyberpunk`;
+
+  const showToast = (message: string) => {
+    setToast(message);
+    setTimeout(() => setToast(null), 2000);
+  };
+
+  const copyMarkdown = async () => {
+    const markdown = stats && personality
+      ? generateReadmeMarkdown({
+          username,
+          cardUrl,
+          domain,
+          stats,
+          personality,
+          options: {
+            template: 'compact',
+            includeBadges: true,
+            includeActivity: true,
+            includeLanguages: true,
+            includePersonality: true,
+          },
+        })
+      : generateReadmeSnippet({ username, theme: 'cyberpunk' });
+
+    await navigator.clipboard.writeText(markdown);
+    showToast('Markdown copied');
+  };
 
   const actions = [
     { 
       icon: '🔗', 
       label: 'Copy Link', 
       action: () => {
-        navigator.clipboard.writeText(`https://gitwrapped.vercel.app/${username}`);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        navigator.clipboard.writeText(`${domain}/${username}`);
+        showToast('Link copied');
       }
     },
     { 
@@ -31,10 +63,7 @@ export function QuickActions({ username }: QuickActionsProps) {
     { 
       icon: '📋', 
       label: 'Copy Markdown', 
-      action: async () => {
-        const markdown = `![GitWrapped](https://gitwrapped.vercel.app/api/card?username=${username})`;
-        await navigator.clipboard.writeText(markdown);
-      }
+      action: copyMarkdown
     },
     { 
       icon: '🔄', 
@@ -68,14 +97,14 @@ export function QuickActions({ username }: QuickActionsProps) {
           ))}
         </div>
         
-        {copied && (
+        {toast && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             className="absolute -top-10 left-0 right-0 text-center bg-black/80 text-white text-xs py-1 rounded"
           >
-            ✓ Copied!
+            ✓ {toast}
           </motion.div>
         )}
       </div>

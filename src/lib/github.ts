@@ -1,13 +1,36 @@
 import { Redis } from '@upstash/redis';
 
-const kv = new Redis({
-  url: process.env.KV_REST_API_URL,
-  token: process.env.KV_REST_API_TOKEN,
-});
+const kv = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN
+  ? new Redis({
+      url: process.env.KV_REST_API_URL,
+      token: process.env.KV_REST_API_TOKEN,
+    })
+  : null;
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
 const GRAPHQL_ENDPOINT = 'https://api.github.com/graphql';
+const MAX_GITHUB_RETRIES = 2;
+
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+export class GitHubApiError extends Error {
+  status: number;
+  code: string;
+
+  constructor(message: string, status = 500, code = 'GITHUB_API_ERROR') {
+    super(message);
+    this.name = 'GitHubApiError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export function isGitHubApiError(error: unknown): error is GitHubApiError {
+  return error instanceof GitHubApiError;
+}
 
 export interface GitHubUser {
   login: string;
@@ -35,19 +58,11 @@ export interface GitHubUser {
     totalPullRequestContributions: number;
     totalPullRequestReviewContributions: number;
     totalRepositoriesWithContributedCommits: number;
-    totalIssuesContributions: number;
+    totalIssueContributions: number;
     contributionCalendar: {
       totalContributions: number;
       weeks: {
         contributionDays: ContributionDay[];
-      }[];
-    };
-    commitmentRepos: {
-      nodes: {
-        repository: {
-          name: string;
-          stargazerCount: number;
-        };
       }[];
     };
   };
@@ -70,7 +85,9 @@ export interface GitHubRepo {
   description: string;
   stargazerCount: number;
   forkCount: number;
-  watcherCount: number;
+  watchers: {
+    totalCount: number;
+  };
   primaryLanguage: {
     name: string;
     color: string;
@@ -89,8 +106,16 @@ export interface GitHubRepo {
   isArchived: boolean;
   isTemplate: boolean;
   isFork: boolean;
-  openIssuesCount: number;
-  topics: string[];
+  issues: {
+    totalCount: number;
+  };
+  topics: {
+    nodes: {
+      topic: {
+        name: string;
+      };
+    }[];
+  };
   licenseInfo: {
     name: string;
   } | null;
@@ -138,7 +163,9 @@ const USER_QUERY = `
           description
           stargazerCount
           forkCount
-          watcherCount
+          watchers {
+            totalCount
+          }
           primaryLanguage {
             name
             color
@@ -157,14 +184,22 @@ const USER_QUERY = `
           isArchived
           isTemplate
           isFork
-          openIssuesCount
-          topics
+          issues(states: OPEN) {
+            totalCount
+          }
+          topics: repositoryTopics(first: 20) {
+            nodes {
+              topic {
+                name
+              }
+            }
+          }
           licenseInfo {
             name
           }
         }
       }
-      topRepositories(first: 10, orderBy: {field: STARGAZER_COUNT, direction: DESC}) {
+      topRepositories(first: 10, orderBy: {field: STARGAZERS, direction: DESC}) {
         nodes {
           name
           description
@@ -185,7 +220,7 @@ const USER_QUERY = `
         totalPullRequestContributions
         totalPullRequestReviewContributions
         totalRepositoriesWithContributedCommits
-        totalIssuesContributions
+        totalIssueContributions
         contributionCalendar {
           totalContributions
           weeks {
@@ -193,14 +228,6 @@ const USER_QUERY = `
               date
               contributionCount
               color
-            }
-          }
-        }
-        commitmentRepos(first: 10, orderBy: {field: COMMIT_COUNT, direction: DESC}) {
-          nodes {
-            repository {
-              name
-              stargazerCount
             }
           }
         }
@@ -223,26 +250,79 @@ const USER_QUERY = `
 
 async function fetchGitHubGraphQL(query: string, variables: Record<string, string>) {
   if (!GITHUB_TOKEN) {
-    throw new Error('GITHUB_TOKEN is not configured');
+    throw new GitHubApiError(
+      'GITHUB_TOKEN is not configured on the server',
+      503,
+      'MISSING_GITHUB_TOKEN'
+    );
   }
 
-  const response = await fetch(GRAPHQL_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${GITHUB_TOKEN}`,
-    },
-    body: JSON.stringify({ query, variables }),
-  });
+  let response: Response | null = null;
+  let lastNetworkError: unknown;
+
+  for (let attempt = 0; attempt <= MAX_GITHUB_RETRIES; attempt++) {
+    try {
+      response = await fetch(GRAPHQL_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${GITHUB_TOKEN}`,
+        },
+        body: JSON.stringify({ query, variables }),
+      });
+    } catch (error) {
+      lastNetworkError = error;
+      if (attempt < MAX_GITHUB_RETRIES) {
+        await sleep((attempt + 1) * 250);
+        continue;
+      }
+      throw new GitHubApiError('Failed to reach GitHub API', 502, 'GITHUB_NETWORK_ERROR');
+    }
+
+    if (response.ok) {
+      break;
+    }
+
+    if (response.status >= 500 && attempt < MAX_GITHUB_RETRIES) {
+      await sleep((attempt + 1) * 250);
+      continue;
+    }
+
+    let details = '';
+    try {
+      const errorBody = await response.json();
+      details = errorBody?.message ? `: ${errorBody.message}` : '';
+    } catch {
+      details = response.statusText ? `: ${response.statusText}` : '';
+    }
+
+    throw new GitHubApiError(
+      `GitHub API error ${response.status}${details}`,
+      response.status,
+      'GITHUB_HTTP_ERROR'
+    );
+  }
+
+  if (!response) {
+    if (lastNetworkError) {
+      throw new GitHubApiError('Failed to reach GitHub API', 502, 'GITHUB_NETWORK_ERROR');
+    }
+    throw new GitHubApiError('Unknown GitHub API failure', 502, 'GITHUB_HTTP_ERROR');
+  }
 
   if (!response.ok) {
-    throw new Error(`GitHub API error: ${response.status}`);
+    throw new GitHubApiError(
+      `GitHub API error ${response.status}: ${response.statusText || 'Bad Gateway'}`,
+      response.status,
+      'GITHUB_HTTP_ERROR'
+    );
   }
 
   const data = await response.json();
   
   if (data.errors) {
-    throw new Error(data.errors[0].message);
+    const message = data.errors[0]?.message || 'GitHub GraphQL query failed';
+    throw new GitHubApiError(message, 502, 'GITHUB_GRAPHQL_ERROR');
   }
 
   return data.data;
@@ -251,13 +331,15 @@ async function fetchGitHubGraphQL(query: string, variables: Record<string, strin
 export async function getGitHubUser(username: string): Promise<GitHubUser | null> {
   const cacheKey = `github:${username}`;
   
-  try {
-    const cached = await kv.get<GitHubUser>(cacheKey);
-    if (cached) {
-      return cached;
+  if (kv) {
+    try {
+      const cached = await kv.get<GitHubUser>(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    } catch {
+      // KV unavailable, continue without cache.
     }
-  } catch {
-    // KV not configured, skip caching
   }
 
   const data = await fetchGitHubGraphQL(USER_QUERY, { username });
@@ -266,10 +348,12 @@ export async function getGitHubUser(username: string): Promise<GitHubUser | null
     return null;
   }
 
-  try {
-    await kv.set(cacheKey, data.user, { ex: 3600 });
-  } catch {
-    // KV not configured, skip caching
+  if (kv) {
+    try {
+      await kv.set(cacheKey, data.user, { ex: 3600 });
+    } catch {
+      // KV unavailable, continue without cache.
+    }
   }
 
   return data.user;
@@ -326,7 +410,7 @@ export function calculateStats(user: GitHubUser): UserStats {
   const ownedRepos = repos.filter(r => !r.isFork);
   const totalStars = repos.reduce((sum, r) => sum + r.stargazerCount, 0);
   const totalForks = repos.reduce((sum, r) => sum + r.forkCount, 0);
-  const totalWatchers = repos.reduce((sum, r) => sum + r.watcherCount, 0);
+  const totalWatchers = repos.reduce((sum, r) => sum + r.watchers.totalCount, 0);
   
   const languages: Record<string, number> = {};
   const languageBytes: Record<string, number> = {};
@@ -433,7 +517,7 @@ export function calculateStats(user: GitHubUser): UserStats {
   ];
 
   const topics = new Set<string>();
-  repos.forEach(r => r.topics.forEach(t => topics.add(t)));
+  repos.forEach(r => r.topics.nodes.forEach(t => topics.add(t.topic.name)));
 
   return {
     totalRepos: ownedRepos.length,
@@ -443,7 +527,7 @@ export function calculateStats(user: GitHubUser): UserStats {
     totalCommits: user.contributionsCollection.totalCommitContributions,
     totalPRs: user.contributionsCollection.totalPullRequestContributions,
     totalPRReviews: user.contributionsCollection.totalPullRequestReviewContributions,
-    totalIssues: user.contributionsCollection.totalIssuesContributions,
+    totalIssues: user.contributionsCollection.totalIssueContributions,
     totalIssueComments: user.issueComments.totalCount,
     followers: user.followers.totalCount,
     following: user.following.totalCount,

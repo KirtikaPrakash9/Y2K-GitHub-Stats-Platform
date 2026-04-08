@@ -29,6 +29,8 @@ import { MobileView } from '@/components/MobileView';
 import { StatsChart } from '@/components/StatsChart';
 import { QuickActions } from '@/components/QuickActions';
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts';
+import { AestheticLab } from '@/components/AestheticLab';
+import { HypeReel } from '@/components/HypeReel';
 
 interface UserData {
   user: {
@@ -220,7 +222,7 @@ export default function ResultsPage() {
       <div className="absolute inset-0 opacity-5 z-0" style={{ backgroundImage: `linear-gradient(var(--neon-cyan) 1px, transparent 1px), linear-gradient(90deg, var(--neon-cyan) 1px, transparent 1px)`, backgroundSize: '50px 50px' }} />
       
       <ResultsNav username={username} />
-      <QuickActions username={username} />
+      <QuickActions username={username} stats={data.stats} personality={data.personality} />
       <KeyboardShortcuts />
       
       <div className="relative z-10 max-w-6xl mx-auto px-4 pt-24">
@@ -236,6 +238,15 @@ export default function ResultsPage() {
         {/* Stats Chart */}
         <div className="mb-8">
           <StatsChart stats={data.stats} />
+        </div>
+
+        <div className="grid lg:grid-cols-5 gap-8 mb-8">
+          <div className="lg:col-span-3">
+            <HypeReel username={username} stats={data.stats} personality={data.personality} level={data.level} />
+          </div>
+          <div className="lg:col-span-2">
+            <AestheticLab />
+          </div>
         </div>
 
         {/* Stats Dashboard */}

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getGitHubUser, calculateStats, analyzePersonality } from '@/lib/github';
+import { getGitHubUser, calculateStats, analyzePersonality, isGitHubApiError } from '@/lib/github';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +31,14 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     console.error('Error analyzing personality:', error);
+
+    if (isGitHubApiError(error)) {
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: error.status }
+      );
+    }
+
     return NextResponse.json(
       { error: 'Failed to analyze personality' },
       { status: 500 }

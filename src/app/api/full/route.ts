@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getGitHubUser, calculateStats, analyzePersonality, calculateLevel, getAchievements } from '@/lib/github';
+import { getGitHubUser, calculateStats, analyzePersonality, calculateLevel, getAchievements, isGitHubApiError } from '@/lib/github';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,6 +60,14 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     console.error('Error fetching full data:', error);
+
+    if (isGitHubApiError(error)) {
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: error.status }
+      );
+    }
+
     return NextResponse.json(
       { error: 'Failed to fetch user data' },
       { status: 500 }

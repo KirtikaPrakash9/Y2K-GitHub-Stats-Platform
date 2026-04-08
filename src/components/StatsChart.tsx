@@ -25,6 +25,7 @@ export function StatsChart({ stats }: StatsChartProps) {
   ];
 
   const maxValue = Math.max(...data.map(d => d.value), 1);
+  const totalActivity = data.reduce((sum, item) => sum + item.value, 0);
 
   return (
     <motion.div
@@ -101,7 +102,7 @@ export function StatsChart({ stats }: StatsChartProps) {
           <div className="flex justify-between items-center">
             <span className="font-mono text-gray-400">Total Activity</span>
             <span className="font-orbitron text-xl font-bold text-white">
-              {Object.values(stats).reduce((a, b) => a + b, 0).toLocaleString()}
+              {totalActivity.toLocaleString()}
             </span>
           </div>
         </div>
